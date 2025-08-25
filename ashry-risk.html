@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ASHRY Risk Assessment</title>
+<style>
+  :root{--bg:#0b1220;--card:#0f1729;--muted:#93a0b5;--ink:#eaf0ff;--brand:#0b66ff;--ok:#18b26b}
+  *{box-sizing:border-box} body{margin:0;background:linear-gradient(160deg,#0a0f1a,#0d1323);color:var(--ink);
+  font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:980px;margin:32px auto;padding:16px}
+  .hdr{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .title{font-weight:700;font-size:20px;margin:0}
+  .pill{border:1px solid #22304a;border-radius:999px;padding:6px 10px;color:var(--muted);background:#0a1020}
+  .grid{display:grid;gap:14px}
+  .card{background:var(--card);border:1px solid #1e2a45;border-radius:14px;padding:14px}
+  .q{margin:0 0 10px 0;font-weight:600}
+  .opts{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .opt{display:flex;gap:10px;align-items:flex-start;border:1px solid #1e2a45;border-radius:12px;padding:10px 12px;
+    background:#0b1326;cursor:pointer;transition:border .16s,background .16s}
+  .opt input{margin-top:2px;accent-color:var(--brand)}
+  .opt.sel{border-color:#2e6bff;background:#0b1f46}
+  small{color:var(--muted)}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:16px}
+  .btn{border:1px solid #27407a;background:var(--brand);color:#fff;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
+  .btn.ghost{background:#0a1020;color:var(--ink)}
+  .result{margin-left:auto;padding:6px 10px;border-radius:999px;border:1px solid #1e2a45;background:#0a1020}
+  .ok{color:var(--ok)} .muted{color:var(--muted)}
+  @media (max-width:520px){.opts{grid-template-columns:1fr}}
+  @media print {.btn,.bar .muted{display:none} body{background:white;color:black} .card{background:white}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <h1 class="title">ASHRY Risk Assessment</h1>
+    <div class="pill" id="progress">Progress: 0/8</div>
+    <div class="pill" id="total">Total: 0.0</div>
+    <div class="pill" id="bucket">Class: Incomplete</div>
+  </div>
+
+  <div id="quiz" class="grid"></div>
+
+  <div class="bar">
+    <div class="muted">Answer all questions, then <span class="ok">Calculate</span>.</div>
+    <div>
+      <button class="btn" id="calc">Calculate</button>
+      <button class="btn ghost" id="copy">Copy</button>
+      <button class="btn ghost" id="print">Print</button>
+      <button class="btn ghost" id="reset">Reset</button>
+    </div>
+    <div class="result" id="verdict">—</div>
+  </div>
+</div>
+
+<script>
+const QUESTIONS = [
+  { id:"q1", text:"Protecting my portfolio is more important than high returns.",
+    options:[
+      ["Strongly Agree",1],["Agree",2],["Neutral",2.5],["Disagree",3],["Strongly Disagree",4]
+    ]},
+  { id:"q2", text:"Keeping the above answer in mind, which statement makes the most sense?",
+    options:[
+      ["Willing to bear losses to maximise returns",3],
+      ["Concerned about losses along with returns",2],
+      ["Completely avoid losses",1]
+    ]},
+  { id:"q3", text:"Which best describes your investment philosophy?",
+    options:[
+      ["Comfortable with stable investments",1],
+      ["Can withstand some fluctuations",2],
+      ["Seeking substantial returns",2.5],
+      ["Seeking potentially high returns",4]
+    ]},
+  { id:"q4", text:"If investing in stocks, which would you choose?",
+    options:[
+      ["Tech-advanced companies at low prices",3],
+      ["Established companies with growth potential",2],
+      ["Blue-chip dividend payers",1]
+    ]},
+  { id:"q5", text:"When markets fall, I’d sell riskier assets and move to safer ones.",
+    options:[["I agree",1],["I somewhat agree",2],["I disagree",3]]},
+  { id:"q6", text:"One-time bet with ₹5,000 of your money. What do you pick?",
+    options:[
+      ["No bet, keep ₹5,000",1],["90% chance of ₹7,500",2],
+      ["60% chance of ₹20,000",3],["25% chance of ₹1,00,000",4]
+    ]},
+  { id:"q7", text:"First thought that crosses your mind when you invest:",
+    options:[
+      ["I should not lose my money",1],["This should not be a bad investment",2],
+      ["This should be a good investment",3],["I know this is a good decision",4]
+    ]},
+  { id:"q8", text:"What do you normally associate with the word ‘risk’?",
+    options:[["Danger",1],["Uncertainty",2],["Opportunity",3],["Thrill",4]]}
+];
+
+const RANGES = [
+  {min:8, max:12, label:"Risk Averse"},
+  {min:13, max:18, label:"Cautious Investor"},
+  {min:19, max:25, label:"Balanced Investor"},
+  {min:26, max:29, label:"Adventurous Investor"}
+];
+
+const el = (t, cls, html) => { const x=document.createElement(t); if(cls) x.className=cls; if(html!=null) x.innerHTML=html; return x; };
+const quiz = document.getElementById("quiz");
+const state = JSON.parse(localStorage.getItem("ashry-risk-answers")||"{}");
+
+function render(){
+  quiz.innerHTML="";
+  QUESTIONS.forEach((q,i)=>{
+    const card = el("div","card");
+    card.appendChild(el("h3","q",`${i+1}. ${q.text}`));
+    const opts = el("div","opts");
+    q.options.forEach(([label,pts],k)=>{
+      const id=`${q.id}_${k}`;
+      const row = el("label","opt"+(state[q.id]===pts?" sel":""));
+      row.innerHTML = `<input type="radio" name="${q.id}" id="${id}" ${state[q.id]===pts?"checked":""}>
+                       <div><div>${label}</div><small>Points: ${pts}</small></div>`;
+      row.addEventListener("click",()=>{
+        state[q.id]=pts;
+        save(); updateHUD(); highlight(q.id,pts);
+      });
+      opts.appendChild(row);
+    });
+    card.appendChild(opts);
+    quiz.appendChild(card);
+  });
+  updateHUD();
+}
+function highlight(qid,pts){
+  document.querySelectorAll(`input[name="${qid}"]`).forEach(input=>{
+    const row=input.parentElement;
+    row.classList.toggle("sel", Number(row.querySelector("small").textContent.replace("Points: ",""))===pts);
+  });
+}
+
+function total(){
+  return QUESTIONS.reduce((s,q)=>s+(+state[q.id]||0),0);
+}
+function classify(n){
+  for(const r of RANGES){ if(n>=r.min && n<=r.max) return r.label }
+  return "Incomplete";
+}
+function complete(){
+  return QUESTIONS.every(q => state[q.id] !== undefined);
+}
+function updateHUD(){
+  document.getElementById("progress").textContent = `Progress: ${Object.keys(state).length}/${QUESTIONS.length}`;
+  document.getElementById("total").textContent = `Total: ${total().toFixed(1)}`;
+  document.getElementById("bucket").textContent = `Class: ${classify(total())}`;
+}
+function save(){ localStorage.setItem("ashry-risk-answers", JSON.stringify(state)); }
+
+function copyResult(){
+  const lines = ["ASHRY Risk Assessment — Result",""];
+  QUESTIONS.forEach(q=>{
+    const pts = state[q.id];
+    const label = (q.options.find(o=>o[1]===pts)||[])[0] || "(unanswered)";
+    lines.push(`• ${q.text} → ${label} (${pts ?? "-"})`);
+  });
+  lines.push("",`Total: ${total().toFixed(1)}`,`Classification: ${classify(total())}`);
+  navigator.clipboard.writeText(lines.join("\n")).then(()=>alert("Result copied."));
+}
+
+document.getElementById("calc").onclick = ()=>{
+  if(!complete()){ alert("Answer all questions first."); return; }
+  const n = total(), c = classify(n);
+  document.getElementById("verdict").textContent = `Total ${n.toFixed(1)} → ${c}`;
+};
+document.getElementById("reset").onclick = ()=>{
+  localStorage.removeItem("ashry-risk-answers");
+  for(const k in state) delete state[k];
+  render();
+};
+document.getElementById("copy").onclick = copyResult;
+document.getElementById("print").onclick = ()=>window.print();
+
+render();
+</script>
+</body>
+</html>
